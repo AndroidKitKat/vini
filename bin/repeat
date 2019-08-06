@@ -1,0 +1,6 @@
+#!/usr/bin/env perl
+
+my $name = shift(@ARGV);
+my $text = shift(@ARGV);
+
+print("<$name> $text\n");

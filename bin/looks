@@ -1,0 +1,29 @@
+#!/usr/bin/env perl
+use Encode;
+
+my %subst = (
+	'b' => 'd',
+	'd' => 'b',
+	'p' => 'q',
+	'q' => 'p',
+	'^' => 'v',
+	'v' => '^',
+	'V' => '^',
+	'>' => '<',
+	'<' => '>',
+	'w' => 'm',
+	'm' => 'w',
+	'M' => 'W',
+	'W' => 'M',
+	'n' => 'u',
+	'u' => 'n',
+	'e' => "\x{258}",
+	"\x{258}" => 'e'
+);
+
+my $text = decode_utf8(shift(@ARGV));
+if ($text =~ /^(.)(.)(.)$/) {
+	if ($subst{$1} && $subst{$3}) {
+		print(encode_utf8($subst{$1} . ($subst{$2} || $2) . $subst{$3} . "\n"));
+	}
+}

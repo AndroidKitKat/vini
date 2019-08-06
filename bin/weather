@@ -1,0 +1,54 @@
+#!/usr/bin/env perl
+
+use strict;
+use warnings;
+use v5.26;
+use utf8;
+
+use JSON;
+use Data::Dumper;
+use WWW::Curl::Easy;
+my $curl = WWW::Curl::Easy->new;
+
+my $apikey = '0881d0f781015b4f1c44ca03282a3a27';
+
+sub get_weather {
+	my $cn = shift;
+	my $url = "https://api.openweathermap.org/data/2.5/weather?q=$cn&appid=$apikey";
+	my $res;
+	$curl->setopt(CURLOPT_HEADER, 0);
+	$curl->setopt(CURLOPT_URL, $url);
+	$curl->setopt(CURLOPT_WRITEDATA, \$res);
+
+	my $ret = $curl->perform;
+	if ($ret == 0) {
+		return we_parse($res);
+	} else {
+		return("Bad response from server");
+	}
+}
+
+sub we_parse {
+	my $json = shift;
+	my $obj = decode_json($json);
+
+	my $code = $obj->{'cod'};
+	my $message = $obj->{'message'};
+	if ($code != 200) {
+		return $message . "\n";
+	}
+
+	my $city = $obj->{'name'};
+	my $weather = $obj->{'weather'}->[0]->{'main'};
+	my $temp = $obj->{'main'}->{'temp'} - 273.15;
+	my $min = $obj->{'main'}->{'temp_min'} - 273.15;
+	my $max = $obj->{'main'}->{'temp_max'} - 273.15;
+	my $pressure = $obj->{'main'}->{'pressure'} / 10;
+	my $humidity = $obj->{'main'}->{'humidity'};
+
+	my $str = "Weather for \x02${city}\x02: ${weather}, ${temp}\xc2\xb0C (${min}\xc2\xb0C-${max}\xc2\xb0C), ${humidity}% humidity, atmospheric pressure of ${pressure}kPa";
+	return $str . "\n";
+}
+
+my $cid = shift(@ARGV);
+print(get_weather($cid));

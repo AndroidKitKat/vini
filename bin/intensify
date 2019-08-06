@@ -1,0 +1,12 @@
+#!/usr/bin/env perl
+my $text = shift(@ARGV);
+
+if ($text =~ /^\[(.+)\|(.+)\]$/) {
+        print("[" . uc($1) . " INTENSIFIES " . uc($2) . "]", "\n");
+} elsif ($text =~ /^\[(.+?)(\.*\?)\]$/) {
+	print("[", lc($1), " intensifies", $2, "]", "\n");
+} elsif ($text =~ /^\[(.+)\]$/) {
+        print("[" . uc($1) . " INTENSIFIES]", "\n");
+} else {
+	print("No match: got \"$text\"\n");
+}

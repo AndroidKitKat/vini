@@ -1,0 +1,15 @@
+#!/usr/bin/perl
+my $nick = shift(@ARGV);
+my $args = shift(@ARGV);
+
+my $target;
+if ($args) {
+	$target = $args;
+} else {
+	$target = $nick;
+}
+
+$target =~ s/\s*$//g;
+$target =~ s/^\s*//g;
+
+print("ACTION pats $target on the head\n");

@@ -1,0 +1,77 @@
+#!/usr/bin/env perl
+
+use strict;
+use warnings;
+use DBI;
+use POSIX;
+
+use Data::Dumper;
+
+my ($text, $channel, $server, $sender) = @ARGV;
+
+if (!($sender)) {
+	print("no sender");
+	exit;
+}
+
+my $order = "ASC";
+my $num;
+my $act;
+my $like;
+my $like_raw;
+if ($text =~ /^!([!-]?)(\d*)$/) {
+	$act = $1;
+	$num = $2;
+
+	if ($act eq "!") {
+		$order = "DESC";
+		$num = 1;
+	} elsif ($act eq "-") {
+		$order = "DESC";
+	}
+
+	if (!$num) {
+		exit;
+	}
+
+	$like = '%';
+} elsif ($text =~ /^!(\w+)$/ || $text =~ /^![\"\'](.+)[\"\']$/) {
+	$order = "DESC";
+
+	$like_raw = $1;
+	$like = $like_raw;
+	$like =~ s/([%_])/\\$1/g;
+	$like = '%' . $like . '%';
+	$num = 1;
+} else {
+	exit;
+}
+
+my $dbh = DBI->connect(
+	"dbi:Pg:dbname=ircbot;host=192.168.90.255",
+	"ircbot",
+	"canttouchthis",
+	{AutoCommit => 0}
+);
+
+if ($order eq 'ASC') {
+	$num += 1;
+}
+my $query = "SELECT text FROM irc_logs WHERE channel = \$1 AND network = \$2 AND nick = \$3 AND text NOT LIKE '!%' AND text LIKE \$4 ORDER BY TIME " . $order . " LIMIT " . $num . ";";
+
+my $res = $dbh->selectcol_arrayref($query, { Columns => [1] }, $channel, $server, $sender, $like);
+if (!(@$res[$num - 1])) {
+	exit;
+}
+
+my $result = @$res[$num - 1];
+if ($like_raw) {
+	$result =~ s/($like_raw)/\002$1\002/;
+}
+my $fmt = "<" . $sender . "> " . $result;
+
+if ($fmt) {
+	print("REPLY ", $fmt, "\n");
+}
+
+$dbh->disconnect;

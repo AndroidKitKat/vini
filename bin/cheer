@@ -1,0 +1,14 @@
+#!/usr/bin/env perl
+my @cheers = (
+	"FSCK(8) YEAH!",
+	"HOORAH!",
+	"HURRAY!",
+	"OORAH!",
+	"YAY!",
+	"*\\o/* CHEERS! *\\o/*",
+	"HOOHAH!",
+	"HOOYAH!",
+	"HUAH!"
+);
+
+print($cheers[rand(@cheers)], "\n");

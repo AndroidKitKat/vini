@@ -1,0 +1,87 @@
+#!/usr/bin/env perl
+
+use strict;
+use warnings;
+use DBI;
+use Encode qw(encode_utf8 decode_utf8);
+
+my $cmd = shift(@ARGV);
+my $gmsg;
+if (@ARGV) {
+	$gmsg = decode_utf8(shift(@ARGV));
+}
+
+if (!$cmd) {
+	exit;
+}
+
+my %commands = (
+	"add" => \&addgirl,
+	"rm" => \&rmgirl,
+	"random" => \&randomgirl
+);
+
+my $dbh = DBI->connect("dbi:Pg:dbname=ircbot;host=192.168.90.255",
+	"ircbot",
+	"canttouchthis",
+	{AutoCommit => 0}
+);
+
+$commands{$cmd}->($gmsg);
+$dbh->disconnect;
+exit;
+
+sub addgirl {
+	my $msg = shift;
+	my ($name, $link) = parsegirl($msg);
+	if (!$name) {
+		return;
+	}
+
+	my $st = $dbh->prepare("INSERT INTO ourgirls VALUES (\$1, \$2);");
+	$st->bind_param(1, $name);
+	$st->bind_param(2, $link);
+	$st->execute && print("Success!\n") || print("Failed!\n");
+	$dbh->commit;
+	$st->finish;
+	return;
+}
+
+sub rmgirl {
+	my $name = shift;
+	if (!$name) {
+		return;
+	}
+
+	my $st = $dbh->prepare("DELETE FROM ourgirls WHERE name = \$1;");
+	$st->bind_param(1, $name);
+	$st->execute && print("Success!\n") || print("Failed: ");
+	$dbh->commit;
+	$st->finish;
+	return;
+}
+
+sub randomgirl {
+	my $msg = shift;
+	my @res = $dbh->selectall_array("SELECT name, link FROM ourgirls;");
+	if (!@res) {
+		print("The list is empty.\n");
+		return;
+	}
+
+	my $index = rand(@res);
+	my $fmt = decode_utf8(@{ $res[$index] }[0]) . ": " . @{ $res[$index] }[1] . "\n";
+	print(encode_utf8($fmt));
+	return;
+}
+
+sub parsegirl {
+	my $msg = shift;
+
+	if ($msg =~ /((?:\p{Lu}\p{Ll}+[\-\s]?)+)\s(https?\:\/\/\S+)/) {
+		return ($1, $2);
+	} else {
+		print("Could not parse message, format is: <command> <name> <url>\n");
+		return;
+	}
+}

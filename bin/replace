@@ -1,0 +1,37 @@
+#!/usr/bin/env perl
+my $nick = shift(@ARGV);
+my $text = shift(@ARGV);
+
+my $regex;
+my $replace;
+if ($text =~ /^\%?s\/(?:(.*?)(?<!\\)\/(.*?)(?:(?<!\\))(?:\/.*)?)$/) {
+	$regex = $1;
+	$replace = $2;
+	$replace =~ s/\\([\\\/])/$1/g;
+} else {
+	exit;
+}
+
+select STDOUT;
+print("GETLOG $regex\n");
+$| = 1;
+
+my $log = <>;
+if ($log eq "%%ERROR%%\n") {
+	exit;
+}
+
+my $nickpart;
+my $textpart;
+my $fmt;
+if ($log =~ /^(\<.*?\>)\s(.*)$/ || $log =~ /^(.*?\s\*)\s(.*)$/) {
+	$nickpart = $1;
+	$textpart = $2;
+} else {
+	$textpart = $log;
+}
+
+$replace = '"' . "\x02" . $replace . "\x02" . '"';
+$textpart =~ s/\n|\r//g;
+$textpart =~ s/${regex}/${replace}/gee;
+print("($nick): $nickpart $textpart\n");

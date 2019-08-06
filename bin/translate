@@ -1,0 +1,58 @@
+#!/usr/bin/env perl
+
+use warnings;
+use strict;
+
+use utf8;
+use Encode;
+use Locale::Language;
+use Yandex::Translate;
+
+my $text = decode_utf8(shift(@ARGV));
+
+my $yapikey = "trnsl.1.1.20180203T155059Z.d9fc8f8b16ca6eb0.ddba74d51446d2881f8989f41cd3ba2501f1251b";
+my $tr = Yandex::Translate->new();
+$tr->set_key($yapikey);
+
+my $detect = 0;
+my $inlang = "en";
+my $outlang = "en";
+my $intext = "";
+my $outtext;
+
+if ($text =~ /(?:(\w+)\-\>?(\w+)\s+)?(.*)$/) {
+	if ($1 && $2) {
+		$inlang = language2code($1);
+		if (!$inlang && length($1) == 2) {
+			$inlang = $1;
+		} elsif (!$inlang) {
+			$detect = 1;
+		}
+
+		$outlang = language2code($2);
+		if (!$outlang && length($2) == 2) {
+			$outlang = $2;
+		}
+	} else {
+		$detect = 1;
+		$outlang = "en";
+	}
+
+	$intext = $3;
+}
+
+$tr->set_text($intext);
+if ($detect) {
+	$inlang = $tr->detect_lang();
+}
+
+$tr->set_from_lang($inlang);
+$tr->set_to_lang($outlang);
+
+$outtext = $tr->translate();
+
+if ($outtext) {
+	print(encode_utf8($outtext), "\n");
+} else {
+	print("Something happened. \\:\n");
+}

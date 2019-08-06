@@ -1,0 +1,16 @@
+#!/usr/bin/env perl
+
+use lib "lib/";
+use youtube;
+use Encode;
+
+my $query = decode_utf8(shift(@ARGV));
+
+my $id = youtube::yt_search_video_id($query);
+if (!($id)) {
+	print("No results.\n");
+	exit;
+}
+
+my $url = "https://youtu.be/" . $id;
+print(youtube::yt_output($id) . " | " . $url, "\n");

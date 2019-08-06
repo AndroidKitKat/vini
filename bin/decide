@@ -1,0 +1,6 @@
+#!/usr/bin/env perl
+
+@opts = ( "yes", "no" );
+
+print(@opts[rand(@opts)], "\n");
+exit(0);

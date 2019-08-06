@@ -1,0 +1,94 @@
+#!/usr/bin/env perl
+use strict;
+use warnings;
+use Encode;
+
+use HTML::HeadParser;
+
+# urltitle
+use WWW::Curl::Simple;
+
+use lib "lib";
+use youtube;
+
+my $MAX_ENTRIES = 10;
+my $BOLD = "";
+my $opening = "\xAB";
+my $closing = "\xBB";
+
+sub urltitle {
+	my $url = shift;
+	my $curl = WWW::Curl::Simple->new(timeout => 5, connection_timeout => 5);
+	my $response = $curl->get($url);
+	return unless $response;
+
+	my $html = $response->decoded_content;
+	my $parser = HTML::HeadParser->new;
+	$parser->parse($html);
+	my $title = $parser->header("Title");
+
+	if ($title) {
+		$title =~ s/\R/ /g;
+		$title =~ s/^\s+//g;
+		$title =~ s/\s{2,}/ /g;
+
+		$title = $opening . " " . $BOLD . $title . $BOLD . " " . $closing;
+		return $title;
+	}
+
+	return;
+}
+
+sub yttitle {
+	my $url = shift;
+	my $id;
+	if ($url =~ /https?\:\/\/youtu\.be\/([\w\d\-\_]+)[\&\?]?.*$/ ||
+	    $url =~ /https?\:\/\/w*\.?youtube\.com\/watch\?.*v\=([\w\d\-\_]+)[\&\?]?.*$/) {
+		$id = $1;
+		my $out = youtube::yt_output($id);
+		if (!($out)) {
+			return;
+		}
+
+		return $out;
+	} else {
+		return urltitle($url);
+	}
+}
+
+sub run {
+	my $text = shift;
+
+	my @urltitles;
+	my $count = 1;
+
+	while ($text =~ m/\b(https?:\/\/[^ ]+)\b/xsmig) {
+		my $url = $1;
+
+		# youtube
+		if ($url =~ /https?\:\/\/youtu\.be\/.+/ ||
+		 $url =~ /https?\:\/\/.*?\.?youtube\.com\/.+/) {
+			push(@urltitles, yttitle($url));
+		# twitter
+		} elsif ($url =~ /https?\:\/\/[www]?\.twitter\.com/ ||
+		 $url =~ /https?\:\/\/t\.co/) {
+		} else {
+			push(@urltitles, urltitle($url));
+		}
+
+		last if ($count++ >= $MAX_ENTRIES);
+	}
+
+	my $output = "";
+	if (scalar(@urltitles) == 1) {
+		$output = $urltitles[0] . "\n";
+	} else {
+		for my $urltitle (@urltitles) {
+			$output .= $urltitle . "\n";
+		}
+	}
+
+	print(encode_utf8($output));
+}
+
+run(decode_utf8(shift(@ARGV)));

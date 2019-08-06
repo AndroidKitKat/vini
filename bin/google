@@ -1,0 +1,118 @@
+#!/usr/bin/env perl
+
+use warnings;
+use strict;
+
+use Locale::Country;
+use Encode;
+use WWW::Curl::Simple;
+use URI::Encode qw(uri_encode);
+use JSON;
+
+use Data::Dumper;
+
+my $default_country = "canada";
+my $gapikey = "AIzaSyCUYi5V6lrqKrgb9AfXeCl_NUj9xPk9nSs";
+my $gcx = "008085626594028423528:3fl07rqg2ta";
+my $BOLD = "";
+
+my $curl = WWW::Curl::Simple->new();
+
+sub getcountryargs {
+	my $country = shift;
+	my $cc = country2code($country);
+	my @args;
+
+	if (length($country) == 2) {
+		$cc = $country;
+	}
+
+	push(@args, "googlehost=google." . $cc);
+	push(@args, "gl=" . $cc);
+	# push(@args, "cr=country" . uc($cc));
+
+	return @args;
+}
+
+sub ggettab {
+	my @uriargs = @_;
+	my $uri = "https://www.googleapis.com/customsearch/v1";
+
+	$uri .= "?" . "key=" . $gapikey;
+	$uri .= "&" . "cx=" . $gcx;
+	$uri .= "&" . "ie=utf8";
+	$uri .= "&" . "oe=utf8";
+
+	for my $arg (@uriargs) {
+		$uri .= "&" . uri_encode($arg);
+	}
+
+	my $res = $curl->get($uri);
+	my $json = $res->decoded_content;
+	my $table = decode_json($json);
+	my $item = ${$table->{items}}[0];
+	return $item;
+}
+
+sub google {
+	my $query = shift;
+	my $country = shift;
+	my $image = shift;
+	my @uriargs;
+
+	push(@uriargs, "q=" . $query);
+
+	if ($image) {
+		push(@uriargs, "searchType=image");
+	}
+
+	my @cargs;
+	if ($country) {
+		@cargs = getcountryargs($country);
+	}
+
+	if (!(@cargs)) {
+		@cargs = getcountryargs($default_country);
+	}
+
+	push(@uriargs, @cargs);
+
+	my $tab = ggettab(@uriargs);
+
+	if (!($tab)) {
+		print("No results.\n");
+		return;
+	}
+
+	my $link = $tab->{link};
+	my $snippet = $tab->{snippet};
+	my $title = $tab->{title};
+
+	$snippet =~ s/\R+//g;
+	if (length($snippet) > 250) {
+		$snippet = substr($snippet, 0, 247) . "...";
+	}
+
+	my $fmt = $BOLD . $title . $BOLD . ": " . $link;
+	if (!($snippet eq $title)) {
+		$fmt .= " | " . $snippet;
+	}
+
+	print(encode_utf8($fmt), "\n");
+	return;
+}
+
+my $type = shift(@ARGV);
+my $q = decode_utf8(shift(@ARGV));
+my $countryarg;
+
+if ($q =~ /\-c\s+(\w+)\s+(.*)$/) {
+	$countryarg = $1;
+	$q = $2;
+}
+
+if ($type eq "gsearch") {
+	google($q, $countryarg, 0);
+} elsif ($type eq "gimage") {
+	google($q, $countryarg, 1);
+}

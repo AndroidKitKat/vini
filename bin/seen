@@ -1,0 +1,62 @@
+#!/usr/bin/env perl
+
+use strict;
+use warnings;
+use DBI;
+use DateTime;
+use DateTime::Format::Duration;
+use Time::HiRes;
+
+my ($sender, $args, $channel, $server) = @ARGV;
+
+my @args = split(" ", $args);
+my $nick = $args[0];
+if (!($nick)) {
+	exit;
+}
+
+my $dbh = DBI->connect(
+	"dbi:Pg:dbname=ircbot;host=192.168.90.255",
+	"ircbot",
+	"canttouchthis",
+	{AutoCommit => 0}
+);
+
+my $res = $dbh->selectcol_arrayref("SELECT EXTRACT(EPOCH FROM (SELECT time)), text FROM irc_logs WHERE lower(nick) = lower(\$1) AND channel = \$2 AND network = \$3 ORDER BY TIME DESC LIMIT 2;", { Columns => [1, 2] }, $nick, $channel, $server);
+
+my $n = 0;
+if (lc($sender) eq lc($nick)) {
+	$n = 2;
+}
+
+if (!(@$res[$n] && @$res[$n + 1])) {
+	print("I've never seen $nick talking in this channel.\n");
+	$dbh->disconnect;
+	exit;
+}
+
+my $unixtime = @$res[$n];
+my $text = @$res[$n + 1];
+
+my $then = DateTime->from_epoch( epoch => $unixtime, time_zone => 'UTC' );
+my $now = DateTime->now(time_zone => 'UTC');
+my $dur = $now - $then;
+
+my $timefmt;
+
+my $fallthrough;
+$timefmt .= $dur->years . " years, " if ($dur->years && ($fallthrough = 1)) || $fallthrough;
+$timefmt .= $dur->months . " months, " if ($dur->months && ($fallthrough = 1)) || $fallthrough;
+$timefmt .= $dur->weeks . " weeks, " if ($dur->weeks && ($fallthrough = 1)) || $fallthrough;
+$timefmt .= $dur->days . " days, " if ($dur->days && ($fallthrough = 1)) || $fallthrough;
+$timefmt .= $dur->hours . " hours, " if ($dur->hours && ($fallthrough = 1)) || $fallthrough;
+$timefmt .= $dur->minutes . " minutes, " if ($dur->minutes && ($fallthrough = 1)) || $fallthrough;
+$timefmt .= $dur->seconds . " seconds ago";
+
+my $fmt = $nick . " was last seen ";
+$fmt .= $timefmt;
+$fmt .= " saying " . "\"" . $text . "\"" . "\n";
+
+print($fmt);
+
+$dbh->disconnect;

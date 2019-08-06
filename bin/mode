@@ -1,0 +1,20 @@
+#!/usr/bin/env perl
+
+my $mode = shift(@ARGV);
+my $word;
+
+my %hash = (
+	"n"=> "nazi",
+	"o" => "operator",
+	"h" => "half-op",
+	"v" => "voice op",
+	"u" => "user"
+);
+
+if ($hash{$mode}) {
+	$word = $hash{$mode};
+} else {
+	$word = "????";
+}
+
+print("You're a $word.\n");

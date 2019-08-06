@@ -1,0 +1,4 @@
+#!/usr/bin/env perl
+
+print("REPLY ", join(" ", @ARGV), "\n");
+exit(0);

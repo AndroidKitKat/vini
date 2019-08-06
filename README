@@ -1,0 +1,239 @@
+Directory listing:
+	src/: the core bot's source directory including Makefile and config.h
+	bin/: executable modules
+	etc/: module configurations for things in bin/
+	lib/: libraries usable by the executables (for compatibility and such)
+	      environment variables are modified in main.c to make use of it.
+	      lib/lua is used for libraries to lua modules using louis
+	ext/: *.lua is attempted to be loaded as a lua extension by louis
+
+Things like prefixes can be defined in src/config.h,
+while the bot's connection settings can be defined src/irc_config.h
+
+The purpose of this bot was to create an interface through stdio
+for executable modules to interact with this very small IRC core.
+
+The IRC core can have hooks registered to certain types of IRC messages to
+call functions which will act on the message.
+This was inspired by the ircII client.
+
+The core can then be extended simply by linking it to blobs of C code which
+register hooks through it. The functions registered to these hooks are sent
+a connection ID, which can be used to retrieve network information, a socket ID,
+which can be used to retrieve information about the socket being used
+(the core supports interacting through multiple sockets as if it were one),
+and a function ID which increments linearly from 0 to n as n hooks are
+registered by the same function, which lets the receiving function distribute
+the execution flow according to its own needs.
+
+Modules can and are encouraged to interact with each-other to provide more
+functionality. Two modules are currently giving it scriptability:
+vinny for stateless modules, and louis for stateful modules. Both are
+asynchronous from the moment they decide to send their hook to a module.
+They start a new thread for each module being called.
+
+The first module is vinny, which receives all registered hooks to a function
+called to_vinny. Vinny is the most featureful, but it's also stateless.
+It receives messages, creates a friendly data structure from them,
+logs them if they're a PRIVMSG, then checks whether they match one of three
+types of hooks, defined in the config files in etc/. The hooks are either
+a matched regex on the message, matched with the pcre library, a command
+found from a hash table, or a custom hook that might not have been a PRIVMSG
+but was directed to vinny. Vinny does the same in all cases, it calls a
+specific program with an argv as requested in the config file in etc/.
+
+This lets extensions be written in whatever language, and makes porting
+modules from any other bot or IRC scripts a breeze.
+
+Commands for bin/progname are defined in etc/progname.conf if it exists,
+if etc/progname.conf doesn't exist, no arguments are passed.
+
+the possible arguments are:
+	$raw$ = The raw IRC message, not split
+	$nick$ = The sender's nick
+	$host$ = The user's host
+	$chan$ = The channel the message was sent in
+	$text$ = The message's text
+	$args$ = The arguments to a command (message without first word)
+	$nuh$ = The user's full nick!user@host
+	$mode$ = The user's channel modes
+	$network$ = The network the message was sent to
+
+Bot functions can be done using:
+	DEF function-name: $arg$, "static text"
+
+Hooked IRC commands can be done using:
+	HOOK IRCCMD: $arg$, "static text"
+
+Regex matches can be done using:
+	MATCH regex: $arg$, "static text"
+
+Multiple commands, hooks, and regexes can be given the same effect like so:
+	DEF f, func, function: $arg$, "static text";
+
+To make a command without arguments, end before the colon
+for example:
+	DEF f, func, function
+
+Vinny modules send back actions to the IRC core from an stdio pipe using
+a simple text-based protocol with the syntax:
+<WORD> [args?] rest of message
+
+The functions are described below:
+	Default (not a valid action)
+		Same as REPLY (if there are no matching arguments)
+	REPLY
+		Reply the exact text to the channel the message was
+		received from
+	ACTION
+		Send the reply as an action
+	SEND <target>
+		Send a message to <target>
+	NOTICE <target>
+		Send a notice to <target>
+	ACTTO <target>
+		Send the reply as an action to <target>
+	RAW
+		Send the rest of the message as raw text, note that any
+		response from the server will not be sent back to the
+		executable.
+	GETLOG <regex>
+		Access the last message matching <regex> in the logs,
+		"%%ERROR%%\n" will be sent back through stdin if it fails.
+
+Furthermore, commands can be hooked the same way they are in filename.conf.
+" | #channel" can be appended to the end to make the new command channel-specific.
+
+For example:
+	MATCH "^regex$": $arg$, "static text" | #channel
+will make the regex only match in #channel
+
+A space-separated list of channels can also be used like so:
+	MATCH regex: $arg$, "static text" | #channel1, #channel2
+
+The arguments will be sent through stdin and they will be removed when the
+process finishes.
+
+The filesystem is also scanned for network-specific modules. If you'd
+like a module to have effect only on Rizon, for example, you would place it
+in networks/Rizon/bin and its config file in networks/Rizon/etc.
+
+The second module is louis, it's useful for stateful extensions, those are
+written in Lua and are given a table containing functions giving them access
+to the IRC core according to the message they were called for.
+
+A lua library is provided from louis, written in C for this purpose:
+irc.reghook(irc_command: string, lua_function: string, commands...)
+	registers hooks to every IRC with the command irc_command, and
+	attempts to call a function called lua_function from this lua state
+	for each hooked message.
+	Any more strings are interpreted as commands that have to be matched
+	before being sent to the bot.
+example: irc.reghook("PRIVMSG", "echo") -> (void)
+	the function called "echo" will be run for every PRIVMSG from IRC
+
+irc.periodic(lua_function: string, period: int)
+	the function named lua_function will be run every period seconds
+	in a separate thread.
+example: irc>periodic("foo", 5) -> (void)
+	the function called "foo" will be run every 5 seconds
+
+irc.getraw()
+	returns the raw message as received from IRC
+example: irc.getraw() -> "xi!xi@nuxi.ca PRIVMSG vini :hi there!\r\n"
+
+irc.network()
+	returns the network's name from which the message was received
+example: irc.network() -> "Rizon"
+
+irc.params(n: int, ...)
+	returns a string for each param asked, or nil if it doesn't exist
+	the string will be the IRC message parameter #n, the tail counts
+	as a paremeter.
+example: irc.params(1, 2, 3)
+	for "xi!xi@nuxi.ca PRIVMSG vini :hi there!\r\n"
+	-> "vini", "hi there!", nil
+
+irc.tail()
+	returns a string containing the tail of the message (after the :)
+	or nil if there is none
+example: irc.tail()
+	for "xi!xi@nuxi.ca PRIVMSG vini :hi there!\r\n"
+	-> "hi there!"
+
+irc.sender()
+	returns a string containing the entire sender's n!u@h
+example: irc.sender()
+	for "xi!xi@nuxi.ca PRIVMSG vini :hi there!\r\n"
+	-> "xi!xi@nuxi.ca"
+
+irc.command()
+	returns a string containing the IRC command of the received message
+example: irc.command()
+	for "xi!xi@nuxi.ca PRIVMSG vini :hi there!\r\n"
+	-> "PRIVMSG"
+
+irc.msg(target, text, network?),
+irc.notice(target, text, network?),
+irc.action(target, text, network?)
+	sends text to IRC as a message, notice, or action (/me), with an
+	optional network argument to make it independent of the current state.
+	The network argument must either be the network name as defined in
+	irc_config.h, or as provided by ISUPPORT
+example: irc.msg("#bsdmasterrace", "hi!") -> (void)
+
+irc.sendraw(text)
+	sends text directly to the IRC socket, assuming it's a valid raw
+	message. termination with \r\n will be insured.
+example: irc.sendraw("PRIVMSG #bsdmasterrace :hi!") -> (void)
+	"PRIVMSG #bsdmasterrace :hi!\r\n" will be written to the IRC socket
+
+ifdef WITH_IRC_INFO:
+irc.ismod(channel, nick)
+	returns whether nick is a mod in channel according to the irc info
+	module
+example: irc.ismod("#bsdmasterrace", "xi") -> true
+
+ifdef WITH_IRC_INFO:
+irc.modes(channel, nick)
+	returns nick's modes according to the irc info module's inner
+	binary representation of them (1111) = (+%@!)
+example: irc.modes("#bsdmasterrace", "xi") -> 0b1010
+
+More functions are provided and can be defined in lib/lua
+
+privmsg.lua: All functions provided by privmsg.lua take the irc table as
+	argument. This is important because it needs to access the irc state.
+	There functions can only be trusted on PRIVMSG IRC commands.
+
+privmsg.get_nick(irc) -> string: parses out the sender's nick and returns it.
+
+privmsg.get_host(irc) -> string: parses out the sender's host and returns it.
+
+privmsg.sent_by_mod(irc) -> bool: returns whether the message was sent by
+	someone who's at least half-op
+
+privmsg.cmd(irc, command) -> bool, string?
+	parses whether the message starts with command including a list of
+	prefixes that are defined in the file.
+	If it does and contains arguments, returns true, args
+	If it does but doesn't contain any arguments, returns true, nil
+	If it doesn't, returns false, nil
+
+privmsg.reply(irc, text) -> (void)
+	replies to the IRC message from whence it came, either to the channel
+	or the nick if it's a query.
+
+privmsg.reply_action(irc, text) -> (void)
+	same as privmsg.reply but with an action (/me)
+
+privmsg.reply_notice(irc, text)
+	replies to the user who sent the message directly with a notice
+
+Third module is the IRC info. It simply hooks to commands like JOIN, PART, QUIT,
+KICK, NICK, AWAY, TOPIC, etc. and keeps information about channels, nicks and
+modes in tables. These informations are then accessible through a few commands.
+
+The IRC core itself hooks itself to some standard IRC messages to know when
+to register, when to join channels, where to parse the bot's own nick,
+respond to PONG, send the initial NICK and USER, etc.
